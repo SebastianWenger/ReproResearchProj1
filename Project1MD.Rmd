@@ -1,0 +1,149 @@
+---
+title: "ReproResearchProj1"
+author: "Sebastian Wenger"
+date: "December 18, 2016"
+output: html_document
+---
+Reproducible Research Project 1
+========================================================
+
+# Introduction
+
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals throughout the day. The data consists of two months of data from an anonymous individual collected during the months of October and November 2012 and include the number of steps taken in 5 minute intervals each day.
+
+# Data Provided
+
+A file "Activitydata.csv" containing data of 3 variables:
+
+1.  *steps*: Indicates the number of steps taken
+2.  *date*:  Indicates the date
+3.  *interval*: Indicates a period of time within a day between interval-5 minutes and interval minutes, where interval is the total amount of minutes occuring in a corresponding day so far. 
+
+## Steps:
+
+1.  Load in the data and assessing data structures(Interval as factor class, Date as POSIX1t class).
+2.  Create a data set showing steps by day, Plot a histogram of steps by day, Find mean and median of steps by day
+3.  Create a data set showing the amount of steps by interval, plot a line graph showing the amount of steps by interval, find the max amount of steps by interval
+4.  Create a data set showing the amount of steps taken by day with NA values for steps replaced by its step average by interval,     find mean and median of steps by day.
+5.  Create a data set that is the data set created in step 4, partitioned by type of day of the week, where "weekday" and "weekend" are the two categories. Plot two line trends, one using weekdays and the other weekends, plotting amount of steps against interval as well. 
+
+##  Load in the data and assessing data structures(Interval as factor class, Date as POSIX1t class).
+
+```{r cache=TRUE}
+#Load packages
+library(knitr)
+opts_chunk$set(echo = TRUE, results = 'hold')
+#Load packages
+library(data.table)
+library(ggplot2)
+library(dplyr)
+#Load data into R
+ActivityData <- read.csv('activity.csv', header = TRUE, sep = ",", colClasses=c("numeric", "character", "numeric"))
+#Convert data fields 
+ActivityData$date <- as.Date(ActivityData$date, format = "%Y-%m-%d")
+ActivityData$interval <- as.factor(ActivityData$interval)
+```
+
+Your working directory should contain the "activity.csv" file.
+
+## Create a data set showing steps by day, Plot a histogram of steps by day, Find mean and median of steps by day
+
+```{r cache=TRUE}
+#Show amount of steps by day
+StepsByDay <- aggregate(steps ~ date, ActivityData, sum)
+colnames(StepsByDay) <- c("date", "steps")
+#Plot histogram of amount of steps by day
+h <- ggplot(StepsByDay, aes(x = steps)) + 
+      geom_histogram(binwidth = 1000) + 
+      labs(title="Histogram of Steps Taken by Day", 
+           x = "Number of Steps Within a Day", y = "Frequency")
+#Find mean and median of amount of steps by day
+MeanSteps <- mean(StepsByDay$steps, na.rm=TRUE)
+MedianSteps <- median(StepsByDay$steps, na.rm=TRUE)
+```
+
+```{r h}
+plot(h)
+```
+
+Mean=10766.189
+Median=10765
+
+## Create a data set showing the amount of steps by interval, plot a line graph showing the amount of steps by interval, find the max amount of steps by interval
+
+```{r cache=TRUE}
+#Show amount of steps by interval
+StepsByInterval <- aggregate(ActivityData$steps, by = list(interval = ActivityData$interval), FUN=mean, na.rm=TRUE)
+#Convert from data type factor to data type integer
+StepsByInterval$interval <- as.integer(levels(StepsByInterval$interval)[StepsByInterval$interval])
+colnames(StepsByInterval) <- c("interval", "steps")
+#Plot line graph of amount of steps by interval
+l <- ggplot(StepsByInterval, aes(x=interval, y=steps)) +   
+      geom_line(size=1) +  
+      labs(title="Average Daily Activity Pattern", x="Interval", y="Number of steps")
+#Find max amount of steps by interval
+MaxInterval <- StepsByInterval[which.max(StepsByInterval$steps),]
+```
+
+```{r l}
+plot(l)
+```
+
+Interval of max steps=835
+Max steps within interval=206.1698
+
+
+## Create a data set showing the amount of steps taken by day with NA values for steps replaced by its step average by interval,     find mean and median of steps by day.
+
+```{r cache=TRUE}
+#Replace NA values in step column with average of corresponding step by interval
+MeanStepsByInterval <- aggregate(steps ~ interval, data = ActivityData, mean)
+ReplaceActivityData <- merge(ActivityData, MeanStepsByInterval, by = "interval", all = FALSE) %>%
+arrange(date, interval)
+isna <- which(is.na(ReplaceActivityData$steps.x)) # Row number where steps.x is NA
+ReplaceActivityData[isna, 2] <- ReplaceActivityData[isna, 4] # Replace NA with average
+ReplaceActivityData[4] <- NULL
+colnames(ReplaceActivityData)[2] <- "steps"  # Swap and delete columns
+#plot histogram of number of steps by day
+ReplaceNAStepsByDay <- aggregate(steps ~ date, data = ReplaceActivityData, sum)
+h2 <- ggplot(ReplaceNAStepsByDay, aes(x = steps)) + 
+      geom_histogram(binwidth = 1000) + 
+      labs(title="Histogram of Steps Taken per Day (NA Replaced with Mean)", 
+           x = "Number of Steps Within a Day", y = "Frequency")
+#Find mean and median number of steps per day
+MeanReplaceSteps_fill   <- mean(ReplaceNAStepsByDay$steps, na.rm=TRUE)
+MedianReplaceSteps_fill <- median(ReplaceNAStepsByDay$steps, na.rm=TRUE)
+```
+
+```{r h2}
+plot(h2)
+```
+
+Mean=10766.189
+Median=10766.189
+
+The mean hasn't changed due to replacing missing values with its corresponding mean by interval, we have only reaffirmed the prior mean.  The median has changed to the same value as the mean however, because the NA values were previously skewing it downwards due to interpreting as 0.
+
+
+## Create a data set that is the data set created in step 4, partitioned by type of day of the week, where "weekday" and "weekend" are the two categories. Plot two line trends, one using weekdays and the other weekends, plotting amount of steps against interval as well.
+
+
+```{r cache=TRUE}
+#Determine if there is a difference in the frequency of steps by day between weekends and weekdays
+WeekData <- transform(ReplaceActivityData, day = weekdays(date))
+WeekData$day <- ifelse((WeekData$day == "Saturday") | (WeekData$day == "Sunday"), "Weekend", "Weekday")
+#Partition weekend and weekday categories
+SeparateDays <- aggregate(steps ~ interval + day, data = WeekData, mean)
+#Plot line graph of weekends and weekdays
+l2 <- ggplot(SeparateDays, aes(x = interval, y = steps, group = day)) + 
+      geom_line(aes(colour = day))
+
+```
+
+```{r l2}
+plot(l2)
+```
+
+The difference between weekdays and weekends is intuitive, as weekdays(structured) have less variability in what intervals steps are performed in, versus weekends(less structured).
